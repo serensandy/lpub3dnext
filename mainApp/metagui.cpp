@@ -6429,14 +6429,14 @@ BlenderRenderDialogGui::BlenderSettings  BlenderRenderDialogGui::defaultSettings
 /*38/6 LBL_RESOLVE_NORMALS       */ {"resolveNormals",                 "guess",    "Resolve Normals",        "Some older LDraw parts have faces with ambiguous normals, this specifies what do do with them"}
 } ;
 BlenderRenderDialogGui::ComboOptItems  BlenderRenderDialogGui::comboOptItems [] = {
-/*  FIRST item set as default    */
-/*0 LBL_COLOUR_SCHEME            */ {"lgeo|ldraw|alt|custom","Realistic Colours|Original LDraw Colours|Alternate LDraw Colours|Custom Colours"},
-/*1 LBL_FLEX_PARTS_SOURCE (t/f)  */ {"1|0|1","LSynth|LDCad|LDCad and LSynth"},
-/*2 LBL_LOGO_STUD_VERSION        */ {"4|3|5","Rounded(4)|Flat(3)|Subtle Rounded(5)"},
-/*3 LBL_LOOK                     */ {"normal|instructions","Photo Realistic|Lego Instructions"},
-/*4 LBL_POSITION_OBJECT (t/f)    */ {"1|0","Centered At Origin On Ground|Centered At Origin"},
-/*5 LBL_RESOLUTION               */ {"Standard|High|Low","Standard Primitives|High Resolution Primitives|Low Resolution Primitives"},
-/*6 LBL_RESOLVE_NORMALS          */ {"guess|double","Recalculate Normals|Two Faces Back To Back"}
+/*  FIRST item set as default         Data                     Item:   */
+/*0 LBL_COLOUR_SCHEME            */ {"lgeo|ldraw|alt|custom",  "Realistic Colours|Original LDraw Colours|Alternate LDraw Colours|Custom Colours"},
+/*1 LBL_FLEX_PARTS_SOURCE (t/f)  */ {"1|0|1",                  "LSynth|LDCad|LDCad and LSynth"},
+/*2 LBL_LOGO_STUD_VERSION        */ {"4|3|5",                  "Rounded(4)|Flat(3)|Subtle Rounded(5)"},
+/*3 LBL_LOOK                     */ {"normal|instructions",    "Photo Realistic|Lego Instructions"},
+/*4 LBL_POSITION_OBJECT (t/f)    */ {"1|0",                    "Centered At Origin On Ground|Centered At Origin"},
+/*5 LBL_RESOLUTION               */ {"Standard|High|Low",      "Standard Primitives|High Resolution Primitives|Low Resolution Primitives"},
+/*6 LBL_RESOLVE_NORMALS          */ {"guess|double",           "Recalculate Normals|Two Faces Back To Back"}
 };
 
 void BlenderRenderDialogGui::getRenderSettings(
@@ -6568,8 +6568,8 @@ void BlenderRenderDialogGui::getRenderSettings(
             }
             if (!documentRender &&
                     i == LBL_CROP_IMAGE)
-                connect(checkBox,SIGNAL(toggled(bool)),
-                            this,SLOT  (setModelSize(bool)));
+                QObject::connect(checkBox,SIGNAL(toggled(bool)),
+                                     this,SLOT  (setModelSize(bool)));
             checkBoxList << checkBox;
             settingsSubform->addRow(label,checkBox);
         } else if (i < LBL_COLOUR_SCHEME) { // QLineEdits
@@ -6584,7 +6584,8 @@ void BlenderRenderDialogGui::getRenderSettings(
                 QImage img(16, 16, QImage::Format_ARGB32);
                 img.fill(0);
                 defaultColourEditAction = lineEdit->addAction(QIcon(QPixmap::fromImage(img)), QLineEdit::TrailingPosition);
-                connect(defaultColourEditAction, SIGNAL(triggered(bool)), this, SLOT(colorButtonClicked(bool)));
+                QObject::connect(defaultColourEditAction, SIGNAL(triggered(bool)),
+                                                    this, SLOT  (colorButtonClicked(bool)));
             } else {
                 if (i == LBL_IMAGE_SCALE)
                     lineEdit->setText(QString::number(mScale, 'g', 1));
@@ -6597,12 +6598,18 @@ void BlenderRenderDialogGui::getRenderSettings(
             settingsSubform->addRow(label,lineEdit);
         } else {                            // QComboBoxes
             QComboBox *comboBox = new QComboBox(blenderContent);
-            comboBox->addItems(comboOptItems[comboBoxItemsIndex].labelStr.split("|"));
-            QStringList dataList = comboOptItems[comboBoxItemsIndex].valueStr.split("|");
+            QString value        = blenderSettings[i].value;
+            QStringList itemList = comboOptItems[comboBoxItemsIndex].items.split("|");
+            QStringList dataList = comboOptItems[comboBoxItemsIndex].data.split("|");
+            comboBox->addItems(itemList);
             for (int j = 0; j < comboBox->count(); j++)
                 comboBox->setItemData(j, dataList.at(j));
             comboBox->setToolTip(blenderSettings[i].tooltip);
-            comboBox->setCurrentIndex(0);
+            int currentIndex = int(comboBox->findData(QVariant::fromValue(value)));
+            comboBox->setCurrentIndex(currentIndex);
+            if (i == LBL_COLOUR_SCHEME)
+                QObject::connect(comboBox,SIGNAL(currentIndexChanged(QString const &)),
+                                 this,    SLOT  (validateColourScheme(QString const &)));
             comboBoxList << comboBox;
             comboBoxItemsIndex++;
             settingsSubform->addRow(label,comboBox);
@@ -6717,9 +6724,10 @@ bool BlenderRenderDialogGui::settingsModified(int &width, int &height, double &s
         else {
             for(int j = 0; j < comboBoxList.size(); j++) {
                 oldValue = blenderSettings[i].value;
-                blenderSettings[i].value = comboBoxList[j]->itemData(comboBoxList[j]->currentIndex()).toString();
+                QString value = comboBoxList[j]->itemData(comboBoxList[j]->currentIndex()).toString();
+                blenderSettings[i].value = value;
                 if (!modified)
-                    modified = blenderSettings[i].value != oldValue;
+                    modified = value != oldValue;
                 i++;
             }
         }
@@ -6727,28 +6735,16 @@ bool BlenderRenderDialogGui::settingsModified(int &width, int &height, double &s
 
     // paths
     for (int i = 0; i < numPaths(); i++) {
-         oldValue = blenderPaths[i].value;
-        blenderPaths[i].value = pathLineEditList[i]->text();
+        oldValue = blenderPaths[i].value;
+        QString value = pathLineEditList[i]->text();
+        blenderPaths[i].value = value;
         if (!modified)
-            modified = blenderPaths[i].value != oldValue;
+            modified = value != oldValue;
     }
 
     return modified;
 }
 
-void BlenderRenderDialogGui::showPathsGroup()
-{
-    if (blenderPathsBox->isHidden()){
-        blenderPathsBox->show();
-        pathsGroupButton->setText("Hide Paths");
-        blenderContent->adjustSize();
-    }
-    else{
-        blenderPathsBox->hide();
-        pathsGroupButton->setText("Show Paths");
-        blenderContent->adjustSize();
-    }
-}
 void BlenderRenderDialogGui::resetSettings()
 {
     blenderVersion                       = Preferences::blenderVersion;
@@ -6786,7 +6782,7 @@ void BlenderRenderDialogGui::resetSettings()
             }
         } else {
             for(int j = 0; j < comboBoxList.size(); j++) {
-                comboBoxList[j]->setCurrentIndex(0);
+                comboBoxList[j]->setCurrentIndex(int(comboBoxList[j]->findText(blenderSettings[i].value)));
                 i++;
             }
         }
@@ -6852,15 +6848,19 @@ void BlenderRenderDialogGui::loadSettings(){
     if (blenderConfigFileInfo.exists()) {
         QSettings Settings(blenderConfigFileInfo.absoluteFilePath(), QSettings::IniFormat);
         for (int i = 0; i < numSettings(); i++) {
-            if (i == LBL_IMAGE_WIDTH || i == LBL_IMAGE_HEIGHT)
+            if (i == LBL_IMAGE_WIDTH ||
+                i == LBL_IMAGE_HEIGHT)
                 continue;
             QString key = QString("%1/%2").arg(IMPORTLDRAW,blenderSettings[i].key);
             QString value = Settings.value(key, QString()).toString();
-            blenderSettings[i].value = value == "True" ? "1" : value == "False" ? "0" : value;
+            if (!value.isEmpty())
+                blenderSettings[i].value = value == "True" ? "1" : value == "False" ? "0" : value;
         }
         for (int i = 1/*skip blenderExe*/; i < numPaths(); i++) {
             QString key = QString("%1/%2").arg(IMPORTLDRAW,blenderPaths[i].key);
-            blenderPaths[i].value = Settings.value(key, QString()).toString();
+            QString value = Settings.value(key, QString()).toString();
+            if (!value.isEmpty())
+                blenderPaths[i].value = value;
         }
     }
 
@@ -6877,6 +6877,7 @@ void BlenderRenderDialogGui::saveSettings()
 //    label = blenderPaths[LBL_BLENDER_PATH].label;
     QString value = blenderPaths[LBL_BLENDER_PATH].value;
     Preferences::setBlenderExePathPreference(value);
+
 //    label = "Blender Version";
     value = blenderVersion;
     Preferences::setBlenderVersionPreference(value);
@@ -6886,32 +6887,28 @@ void BlenderRenderDialogGui::saveSettings()
         blenderConfigFile = Preferences::blenderDocumentConfigFile;
     else
         blenderConfigFile = Preferences::blenderRenderConfigFile;
-    QSettings Settings(blenderConfigFile, QSettings::IniFormat);
 
+    QSettings Settings(blenderConfigFile, QSettings::IniFormat);
     Settings.beginGroup(IMPORTLDRAW);
-//    label = "LDraw Path";
-    value = QDir::toNativeSeparators(Preferences::ldrawLibPath);
-    Settings.setValue(ldrawDirectoryKey, QVariant(value));
+
 //    label = "Parameter File Path";
     value = QDir::toNativeSeparators(QString("%1/%2").arg(QFileInfo(blenderConfigFile).absolutePath()).arg(VER_BLENDER_PARAMS_FILE));
     Settings.setValue(parameterFileKey, QVariant(value));
     if (!QFileInfo(value).exists())
         exportParameterFile();
-//    label = "Alternate (Custom) LDConfig";
-    value = QDir::toNativeSeparators(Preferences::altLDConfigPath);
-    Settings.setValue(customLDConfigKey, QVariant(value));
+
+//    label = "Search Directories";
+    value = QDir::toNativeSeparators(Preferences::ldSearchDirs.join(","));
+    Settings.setValue(searchDirectoriesKey, QVariant(value));
+
     for (int i = 1/*skip blenderExe*/; i < numPaths(); i++) {
 //        label = blenderPaths[i].label;
         value = QDir::toNativeSeparators(blenderPaths[i].value);
         Settings.setValue(QString("%1").arg(blenderPaths[i].key), QVariant(value));
     }
-//    label = "Search Directories";
-    value = QDir::toNativeSeparators(Preferences::ldSearchDirs.join(","));
-    Settings.setValue(searchDirectoriesKey, QVariant(value));
 
     for (int i = 0; i < numSettings(); i++) {
 //        label = blenderSettings[i].label;
-        value = blenderSettings[i].value == "1" ? "True" : blenderSettings[i].value == "0" ? "False" : blenderSettings[i].value;
         if (i == LBL_BEVEL_WIDTH ||
             i == LBL_CAMERA_BORDER_PERCENT ||
             i == LBL_DEFAULT_COLOUR ||
@@ -6919,36 +6916,31 @@ void BlenderRenderDialogGui::saveSettings()
             i == LBL_IMAGE_SCALE ||
             i == LBL_LOGO_STUD_VERSION)
             value = blenderSettings[i].value;
-        if (i == LBL_IMAGE_WIDTH ||
+        else if (i == LBL_IMAGE_WIDTH ||
             i == LBL_IMAGE_HEIGHT ||
             i == LBL_KEEP_ASPECT_RATIO)
             continue;
-        if (i == LBL_COLOUR_SCHEME){
-            if (blenderSettings[i].value == "custom" &&
-                blenderPaths[LBL_LDCONFIG_PATH].value.isEmpty() &&
-                Preferences::altLDConfigPath.isEmpty()){
-                blenderSettings[i].value = defaultSettings[i].value;
-                QMessageBox box;
-                box.setTextFormat (Qt::RichText);
-                box.setIcon (QMessageBox::Critical);
-                box.setStandardButtons (QMessageBox::Ok);
-                box.setDefaultButton   (QMessageBox::Ok);
-                box.setWindowFlags (Qt::Dialog | Qt::CustomizeWindowHint | Qt::WindowTitleHint);
-                box.setWindowTitle(tr ("Custom LDraw Colours"));
-                QString header = "<b>" + tr ("Custom LDConfig file not found.") + "</b>";
-                QString body = tr ("Colour scheme 'custom' selected but no LDConfig file was specified.<br>"
-                                   "The default colour scheme '%1' will be used.")
-                                   .arg(blenderSettings[i].value);
-                box.setText (header);
-                box.setInformativeText (body);
-                box.exec();
-            } else if (!blenderPaths[LBL_LDCONFIG_PATH].value.isEmpty()){
-                Settings.setValue(customLDConfigKey, QVariant(blenderPaths[LBL_LDCONFIG_PATH].value));
-            }
-        }
+        else
+            value = blenderSettings[i].value == "1" ? "True"
+                                                    : blenderSettings[i].value == "0" ? "False"
+                                                                                      : blenderSettings[i].value;
         Settings.setValue(QString("%1").arg(blenderSettings[i].key), QVariant(value));
     }
     Settings.endGroup();
+}
+
+void BlenderRenderDialogGui::showPathsGroup()
+{
+    if (blenderPathsBox->isHidden()){
+        blenderPathsBox->show();
+        pathsGroupButton->setText("Hide Paths");
+        blenderContent->adjustSize();
+    }
+    else{
+        blenderPathsBox->hide();
+        pathsGroupButton->setText("Show Paths");
+        blenderContent->adjustSize();
+    }
 }
 
 int BlenderRenderDialogGui::numSettings(bool defaultSettings){
@@ -7046,7 +7038,7 @@ void BlenderRenderDialogGui::sizeChanged(const QString &value)
 {
     /* original height x new width / original width = new height */
     int mNewValue = value.toInt();
-    if (checkBoxList[LBL_KEEP_ASPECT_RATIO]->isChecked())
+    if (checkBoxList[KEEP_ASPECT_RATIO_BOX]->isChecked())
     {
         if (sender() == lineEditList[IMAGE_WIDTH_EDIT])
         {
@@ -7069,12 +7061,39 @@ void BlenderRenderDialogGui::sizeChanged(const QString &value)
 
 void BlenderRenderDialogGui::setModelSize(bool checked)
 {
+    if (checked) {
+        bool conflict[3];
+        if ((conflict[0] = checkBoxList[KEEP_ASPECT_RATIO_BOX]->isChecked()))
+            checkBoxList[KEEP_ASPECT_RATIO_BOX]->setChecked(!checked);
+        if ((conflict[1] = checkBoxList[ADD_ENVIRONMENT_BOX]->isChecked()))
+            checkBoxList[ADD_ENVIRONMENT_BOX]->setChecked(!checked);
+        if ((conflict[2] = !checkBoxList[TRANSPARENT_BACKGROUND_BOX]->isChecked()))
+            checkBoxList[TRANSPARENT_BACKGROUND_BOX]->setChecked(checked);
+
+        if (conflict[0] || conflict[1] || conflict[2]) {
+            QMessageBox box;
+            box.setTextFormat (Qt::RichText);
+            box.setIcon (QMessageBox::Information);
+            box.setStandardButtons (QMessageBox::Ok);
+            box.setDefaultButton   (QMessageBox::Ok);
+            box.setWindowFlags (Qt::Dialog | Qt::CustomizeWindowHint | Qt::WindowTitleHint);
+            box.setWindowTitle(tr ("LDraw Render Settings"));
+            QString header = "<b>" + tr ("Crop image configuration settings conflict were resolved.") + "</b>";
+            QString body = tr ("%1%2%3")
+                               .arg(conflict[0] ? "Keep aspect ratio set to false.<br>" : "")
+                               .arg(conflict[1] ? "Add environment (backdrop and base plane) set to false.<br>" : "")
+                               .arg(conflict[2] ? "Transparent background set to true.<br>" : "");
+            box.setText (header);
+            box.setInformativeText (body);
+            box.exec();
+        }
+    }
+
     disconnect(lineEditList[IMAGE_HEIGHT_EDIT],SIGNAL(textChanged(const QString &)),
                                           this,SLOT  (sizeChanged(const QString &)));
     disconnect(lineEditList[IMAGE_WIDTH_EDIT],SIGNAL(textChanged(const QString &)),
                                         this, SLOT  (sizeChanged(const QString &)));
 
-    checkBoxList[LBL_KEEP_ASPECT_RATIO]->setChecked(!checked);
     if (checked)
     {
         lineEditList[IMAGE_WIDTH_EDIT]->setText(QString::number(gui->GetImageWidth()));
@@ -7090,6 +7109,31 @@ void BlenderRenderDialogGui::setModelSize(bool checked)
                                        this,SLOT  (sizeChanged(const QString &)));
     connect(lineEditList[IMAGE_WIDTH_EDIT],SIGNAL(textChanged(const QString &)),
                                       this,SLOT  (sizeChanged(const QString &)));
+}
+
+void BlenderRenderDialogGui::validateColourScheme(QString const &value)
+{
+    if (value == "custom" &&
+        blenderPaths[LBL_LDCONFIG_PATH].value.isEmpty() &&
+        Preferences::altLDConfigPath.isEmpty()) {
+        blenderSettings[LBL_COLOUR_SCHEME].value = defaultSettings[LBL_COLOUR_SCHEME].value;
+        QMessageBox box;
+        box.setTextFormat (Qt::RichText);
+        box.setIcon (QMessageBox::Critical);
+        box.setStandardButtons (QMessageBox::Ok);
+        box.setDefaultButton   (QMessageBox::Ok);
+        box.setWindowFlags (Qt::Dialog | Qt::CustomizeWindowHint | Qt::WindowTitleHint);
+        box.setWindowTitle(tr ("Custom LDraw Colours"));
+        QString header = "<b>" + tr ("Custom LDConfig file not found.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+                                     "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+                                     "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;") + "</b>";
+        QString body = tr ("Colour scheme 'custom' selected but no LDConfig file was specified.<br>"
+                           "The default colour scheme '%1' will be used.")
+                           .arg(blenderSettings[LBL_COLOUR_SCHEME].value);
+        box.setText (header);
+        box.setInformativeText (body);
+        box.exec();
+    }
 }
 
 bool BlenderRenderDialogGui::promptAccept()
@@ -7793,7 +7837,8 @@ void BlenderRenderDialogGui::loadDefaultParameters(QByteArray& Buffer, int Which
 
     /*
     # LIGHTED BRICKS
-    # Specify the light emission colour and intensity for lighted bricks
+    # Dictionary with part number (with extension), as key,
+    # of lighted bricks, light emission colour and intensity, as values.
 
     #    Item---------  PartID---  Light--------------  Intensity
     */
@@ -7879,7 +7924,8 @@ bool BlenderRenderDialogGui::exportParameterFile(){
 
         outstream << "" << endl;
         outstream << "# LIGHTED BRICKS" << endl;
-        outstream << "# Specify the light emission colour and intensity for lighted bricks" << endl;
+		outstream << "# Dictionary with part number (with extension), as key," << endl;
+        outstream << "# of lighted bricks, light emission colour and intensity, as values." << endl;
         outstream << "" << endl;
         outstream << "# Item-------  PartID---  Light--------------  Intensity" << endl;
 

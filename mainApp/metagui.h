@@ -1824,6 +1824,7 @@ public slots:
     void setDefaultColor(int value) const;
     void colorButtonClicked(bool);
     void setModelSize(bool);
+    void validateColourScheme(QString const &);
 
     void update();
     void reject();
@@ -1972,8 +1973,8 @@ private:
     };
 
     struct ComboOptItems {
-        QString valueStr;
-        QString labelStr;
+        QString data;
+        QString items;
     };
 
     static BlenderSettings blenderSettings [];
